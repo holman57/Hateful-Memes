@@ -18,11 +18,14 @@ The example tries to replicate the model developed in DrivenData's [blog post](h
 
 ## Installation
 
-Preferably, create your own conda environment before following the steps below:
+Preferably, you would create your own conda environment like the following:
 
 ```
-git clone https://github.com/apsdehal/hm_example_mmf
-cd hm_example_mmf
+git clone git@github.com:holman57/Hateful-Memes.git
+cd Hateful-Memes
+conda create --name mmf
+conda activate mmf
+conda install -c anaconda pip
 pip install -r requirements.txt
 ```
 
