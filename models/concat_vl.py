@@ -48,3 +48,4 @@ class LanguageAndVisionConcat(BaseModel):
 
         # MMF will automatically calculate loss
         return output
+
