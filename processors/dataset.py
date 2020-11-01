@@ -1,3 +1,8 @@
+import torch
+import pandas as pd
+from PIL.Image import Image
+
+
 class HatefulMemesDataset(torch.utils.data.Dataset):
     """Uses jsonl data to preprocess and serve
     dictionary of multimodal tensors for model input.

@@ -1,12 +1,24 @@
+import argparse
+import configparser
 import logging
 import warnings
+import tempfile
+import fasttext
 import torch
+import json
+import random
 import pytorch_lightning as pl
 import pandas as pd
+import numpy as np
+import torchvision
+from tqdm import tqdm
+from pathlib import Path
+from dataset import HatefulMemesDataset
 
-
-warnings.filterwarnings("ignore")
 logging.getLogger().setLevel(logging.WARNING)
+warnings.filterwarnings("ignore")
+config = configparser.ConfigParser()
+config.read('config.ini')
 
 
 class LanguageAndVisionConcat(torch.nn.Module):
@@ -328,7 +340,6 @@ class HatefulMemesModel(pl.LightningModule):
 
 
 def main(tr_path, val_path, te_path, chk_path, name, num_epochs):
-
     hparams = {
         "train_path": tr_path,
         "dev_path": val_path,
@@ -347,15 +358,14 @@ def main(tr_path, val_path, te_path, chk_path, name, num_epochs):
         "early_stop_patience": 4
     }
 
+    model = HatefulMemesModel(hparams=hparams)
+    model.fit()
 
-    VLN = VLNmodel(hparams=hparams)
-    VLN.fit()
+    save_chk_path = chk_path + name + ".ckpt"
+    checkpoint = {'state_dict': model.state_dict()}
+    torch.save(checkpoint, save_chk_path)
 
-    checkpoint = {}
-    checkpoint['state_dict'] = VLN.state_dict()
-    torch.save(checkpoint, name + ".ckpt")
-
-    VLN.test(te_path, name)
+    model.test(te_path, name)
 
 
 if __name__ == "__main__":
