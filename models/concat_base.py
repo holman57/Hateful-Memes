@@ -6,11 +6,13 @@ import tempfile
 import fasttext
 import torch
 import json
+import os
 import random
 import pytorch_lightning as pl
 import pandas as pd
 import numpy as np
 import torchvision
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
 from dataset import HatefulMemesDataset
@@ -18,7 +20,7 @@ from dataset import HatefulMemesDataset
 logging.getLogger().setLevel(logging.WARNING)
 warnings.filterwarnings("ignore")
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read('../config/config.ini')
 
 
 class LanguageAndVisionConcat(torch.nn.Module):
@@ -32,7 +34,6 @@ class LanguageAndVisionConcat(torch.nn.Module):
             vision_feature_dim,
             fusion_output_size,
             dropout_p,
-
     ):
         super(LanguageAndVisionConcat, self).__init__()
         self.language_module = language_module
@@ -49,15 +50,9 @@ class LanguageAndVisionConcat(torch.nn.Module):
         self.dropout = torch.nn.Dropout(dropout_p)
 
     def forward(self, text, image, label=None):
-        text_features = torch.nn.functional.relu(
-            self.language_module(text)
-        )
-        image_features = torch.nn.functional.relu(
-            self.vision_module(image)
-        )
-        combined = torch.cat(
-            [text_features, image_features], dim=1
-        )
+        text_features = torch.nn.functional.relu(self.language_module(text))
+        image_features = torch.nn.functional.relu(self.vision_module(image))
+        combined = torch.cat([text_features, image_features], dim=1)
         fused = self.dropout(
             torch.nn.functional.relu(
                 self.fusion(combined)
@@ -69,7 +64,8 @@ class LanguageAndVisionConcat(torch.nn.Module):
             self.loss_fn(pred, label)
             if label is not None else label
         )
-        return (pred, loss)
+
+        return pred, loss
 
 
 class HatefulMemesModel(pl.LightningModule):
@@ -86,16 +82,9 @@ class HatefulMemesModel(pl.LightningModule):
 
         # assign some hparams that get used in multiple places
         self.embedding_dim = self.hparams.get("embedding_dim", 300)
-        self.language_feature_dim = self.hparams.get(
-            "language_feature_dim", 300
-        )
-        self.vision_feature_dim = self.hparams.get(
-            # balance language and vision features by default
-            "vision_feature_dim", self.language_feature_dim
-        )
-        self.output_path = Path(
-            self.hparams.get("output_path", "model-outputs")
-        )
+        self.language_feature_dim = self.hparams.get("language_feature_dim", 300)
+        self.vision_feature_dim = self.hparams.get("vision_feature_dim", self.language_feature_dim)
+        self.output_path = Path(self.hparams.get("output_path", "model-outputs"))
         self.output_path.mkdir(exist_ok=True)
 
         # instantiate transforms, datasets
@@ -107,8 +96,6 @@ class HatefulMemesModel(pl.LightningModule):
         # set up model and training
         self.model = self._build_model()
         self.trainer_params = self._get_trainer_params()
-
-    ## Required LightningModule Methods (when validating) ##
 
     def forward(self, text, image, label=None):
         return self.model(text, image, label)
@@ -158,7 +145,6 @@ class HatefulMemesModel(pl.LightningModule):
         ]
         return optimizers, schedulers
 
-    @pl.data_loader
     def train_dataloader(self):
         return torch.utils.data.DataLoader(
             self.train_dataset,
@@ -167,7 +153,6 @@ class HatefulMemesModel(pl.LightningModule):
             num_workers=self.hparams.get("num_workers", 16)
         )
 
-    @pl.data_loader
     def val_dataloader(self):
         return torch.utils.data.DataLoader(
             self.dev_dataset,
@@ -175,8 +160,6 @@ class HatefulMemesModel(pl.LightningModule):
             batch_size=self.hparams.get("batch_size", 4),
             num_workers=self.hparams.get("num_workers", 16)
         )
-
-    ## Convenience Methods ##
 
     def fit(self):
         self._set_seed(self.hparams.get("random_state", 42))
@@ -213,9 +196,7 @@ class HatefulMemesModel(pl.LightningModule):
         image_dim = self.hparams.get("image_dim", 224)
         image_transform = torchvision.transforms.Compose(
             [
-                torchvision.transforms.Resize(
-                    size=(image_dim, image_dim)
-                ),
+                torchvision.transforms.Resize(size=(image_dim, image_dim)),
                 torchvision.transforms.ToTensor(),
                 # all torchvision models expect the same
                 # normalization mean and std
@@ -255,9 +236,7 @@ class HatefulMemesModel(pl.LightningModule):
         # classification is to overwrite last layer
         # with an identity transformation, we'll reduce
         # dimension using a Linear layer, resnet is 2048 out
-        vision_module = torchvision.models.resnet152(
-            pretrained=True
-        )
+        vision_module = torchvision.models.resnet152(pretrained=True)
         vision_module.fc = torch.nn.Linear(
             in_features=2048,
             out_features=self.vision_feature_dim
@@ -279,41 +258,26 @@ class HatefulMemesModel(pl.LightningModule):
     def _get_trainer_params(self):
         checkpoint_callback = pl.callbacks.ModelCheckpoint(
             filepath=self.output_path,
-            monitor=self.hparams.get(
-                "checkpoint_monitor", "avg_val_loss"
-            ),
-            mode=self.hparams.get(
-                "checkpoint_monitor_mode", "min"
-            ),
+            monitor=self.hparams.get("checkpoint_monitor", "avg_val_loss"),
+            mode=self.hparams.get("checkpoint_monitor_mode", "min"),
             verbose=self.hparams.get("verbose", True)
         )
-
         early_stop_callback = pl.callbacks.EarlyStopping(
-            monitor=self.hparams.get(
-                "early_stop_monitor", "avg_val_loss"
-            ),
-            min_delta=self.hparams.get(
-                "early_stop_min_delta", 0.001
-            ),
-            patience=self.hparams.get(
-                "early_stop_patience", 3
-            ),
+            monitor=self.hparams.get("early_stop_monitor", "avg_val_loss"),
+            min_delta=self.hparams.get("early_stop_min_delta", 0.001),
+            patience=self.hparams.get("early_stop_patience", 3),
             verbose=self.hparams.get("verbose", True),
         )
-
         trainer_params = {
             "checkpoint_callback": checkpoint_callback,
             "early_stop_callback": early_stop_callback,
             "default_save_path": self.output_path,
-            "accumulate_grad_batches": self.hparams.get(
-                "accumulate_grad_batches", 1
-            ),
+            "accumulate_grad_batches": self.hparams.get("accumulate_grad_batches", 1),
             "gpus": self.hparams.get("n_gpu", 1),
             "max_epochs": self.hparams.get("max_epochs", 100),
-            "gradient_clip_val": self.hparams.get(
-                "gradient_clip_value", 1
-            ),
+            "gradient_clip_val": self.hparams.get("gradient_clip_value", 1),
         }
+
         return trainer_params
 
     @torch.no_grad()
@@ -323,15 +287,13 @@ class HatefulMemesModel(pl.LightningModule):
             index=test_dataset.samples_frame.id,
             columns=["proba", "label"]
         )
-        test_dataloader = torch.utils.data.DataLoader(
+        test_dataloader = DataLoader(
             test_dataset,
             shuffle=False,
             batch_size=self.hparams.get("batch_size", 4),
             num_workers=self.hparams.get("num_workers", 16))
         for batch in tqdm(test_dataloader, total=len(test_dataloader)):
-            preds, _ = self.model.eval().to("cpu")(
-                batch["text"], batch["image"]
-            )
+            preds, _ = self.model.eval().to("cpu")(batch["text"], batch["image"])
             submission_frame.loc[batch["id"], "proba"] = preds[:, 1]
             submission_frame.loc[batch["id"], "label"] = preds.argmax(dim=1)
         submission_frame.proba = submission_frame.proba.astype(float)
@@ -339,11 +301,12 @@ class HatefulMemesModel(pl.LightningModule):
         return submission_frame
 
 
-def main(tr_path, val_path, te_path, chk_path, name, num_epochs):
+def main(chk_path, name, num_epochs):
     hparams = {
-        "train_path": tr_path,
-        "dev_path": val_path,
-        "img_dir": config.get('general', 'alfred_full'),
+        "train_path": '../data/train.jsonl',
+        "dev_path": '../data/dev_unseen.jsonl',
+        "test_path": '../data/test_unseen.jsonl',
+        "img_dir": '../data/img',
         "embedding_dim": 150,
         "language_feature_dim": 300,
         "vision_feature_dim": 300,
@@ -351,7 +314,7 @@ def main(tr_path, val_path, te_path, chk_path, name, num_epochs):
         "dev_limit": None,
         "lr": 0.00005,
         "max_epochs": num_epochs,
-        "output_path": config.get('general', 'model_output'),
+        "output_path": '',
         "n_gpu": 1,
         "batch_size": 4,
         "accumulate_grad_batches": 4,
@@ -365,20 +328,26 @@ def main(tr_path, val_path, te_path, chk_path, name, num_epochs):
     checkpoint = {'state_dict': model.state_dict()}
     torch.save(checkpoint, save_chk_path)
 
-    model.test(te_path, name)
+    model.test(hparams['test_path'], name)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("tr_path", help="Path to training instances")
-    parser.add_argument("val_path", help="Path validation instances")
-    parser.add_argument("te_path", help="Path to test instances")
-    parser.add_argument("chk_path", help="Path to the checkpoint")
+    parser.add_argument("te_path",
+                        help="Path to test instances")
+    parser.add_argument("--ckpt", "-c",
+                        default='',
+                        help="Path to the checkpoint")
     parser.add_argument("--name", "-n",
-                        help="Name of the output preds")
+                        help="Name of test predictions file")
     parser.add_argument("--epoch", "-e",
                         default=config.getint('model', 'num_epochs'),
                         help="Specifies the number of epochs to train for")
+    parser.add_argument("--cuda", "-g",
+                        default=config.getint('model', 'num_epochs'),
+                        help="Specifies the gpu")
     args = parser.parse_args()
 
-    main(args.tr_path, args.val_path, args.te_path, args.chk_path, args.name, int(args.epoch))
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
+
+    main(args.chk_path, args.name, int(args.epoch))

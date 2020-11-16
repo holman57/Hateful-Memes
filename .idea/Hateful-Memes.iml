@@ -6,7 +6,7 @@
       <sourceFolder url="file://$MODULE_DIR$/processors" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/config" isTestSource="false" />
     </content>
-    <orderEntry type="jdk" jdkName="Remote Python 3.8.5 (sftp://ldh0199@129.120.61.112:22/anaconda/envs/mmf/bin/python)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.8 (mmf)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
   <component name="PyDocumentationSettings">
