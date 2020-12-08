@@ -12,6 +12,7 @@ import pytorch_lightning as pl
 import pandas as pd
 import numpy as np
 import torchvision
+import pandas_path
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from pathlib import Path
@@ -271,7 +272,7 @@ class HatefulMemesModel(pl.LightningModule):
         trainer_params = {
             "checkpoint_callback": checkpoint_callback,
             "early_stop_callback": early_stop_callback,
-            "default_save_path": self.output_path,
+           #"default_save_path": self.output_path,
             "accumulate_grad_batches": self.hparams.get("accumulate_grad_batches", 1),
             "gpus": self.hparams.get("n_gpu", 1),
             "max_epochs": self.hparams.get("max_epochs", 100),
@@ -303,10 +304,10 @@ class HatefulMemesModel(pl.LightningModule):
 
 def main(chk_path, name, num_epochs):
     hparams = {
-        "train_path": '../data/train.jsonl',
-        "dev_path": '../data/dev_unseen.jsonl',
-        "test_path": '../data/test_unseen.jsonl',
-        "img_dir": '../data/img',
+        "train_path": '/storage/scratch2/share/eb_research_pool/mmf_dataset/train.jsonl',
+        "dev_path": '/storage/scratch2/share/eb_research_pool/mmf_dataset/dev.jsonl',
+        "test_path": '/storage/scratch2/share/eb_research_pool/mmf_dataset/test.jsonl',
+        "img_dir": '/storage/scratch2/share/eb_research_pool/mmf_dataset/',
         "embedding_dim": 150,
         "language_feature_dim": 300,
         "vision_feature_dim": 300,
@@ -333,8 +334,6 @@ def main(chk_path, name, num_epochs):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("te_path",
-                        help="Path to test instances")
     parser.add_argument("--ckpt", "-c",
                         default='',
                         help="Path to the checkpoint")
@@ -344,10 +343,10 @@ if __name__ == "__main__":
                         default=config.getint('model', 'num_epochs'),
                         help="Specifies the number of epochs to train for")
     parser.add_argument("--cuda", "-g",
-                        default=config.getint('model', 'num_epochs'),
+                        default=0,
                         help="Specifies the gpu")
     args = parser.parse_args()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
 
-    main(args.chk_path, args.name, int(args.epoch))
+    main(args.ckpt, args.name, int(args.epoch))

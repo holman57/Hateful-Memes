@@ -1,6 +1,8 @@
 import torch
 import pandas as pd
-from PIL.Image import Image
+from pathlib import Path
+import pandas_path
+from PIL import Image
 
 
 class HatefulMemesDataset(torch.utils.data.Dataset):
@@ -48,7 +50,7 @@ class HatefulMemesDataset(torch.utils.data.Dataset):
             drop=True
         )
         self.samples_frame.img = self.samples_frame.apply(
-            lambda row: (img_dir / row.img), axis=1
+            lambda row: (img_dir + row.img), axis=1
         )
 
         # https://github.com/drivendataorg/pandas-path
